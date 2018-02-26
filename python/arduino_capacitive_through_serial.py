@@ -4,13 +4,14 @@ import numpy as np
 from time import time, sleep
 from matplotlib import pyplot as plt
 
-
+# 
 CMD_START_TRANSMISSION = b'G'
 CMD_END_TRANSMISSION = b'X'
 
 # SERIAL_START_TRANSMISSION = 'S'
 SERIAL_END_TRANSMISSION = 'E\r\n'
 
+filename = "arduino_buffer.txt"
 SLEEP_ON_WRITE = True
 SLEEP_ON_READ = False
 
@@ -18,7 +19,7 @@ MAX_SIZE = 16
 SLEEP_TIME_AFTER_CMD = .01
 SLEEP_TIME_BETWEEN_REQUESTS = .05  # .01
 
-NUMBER_OF_VARIABLES = 8
+NUMBER_OF_VARIABLES = 2
 PLOT_ON = False
 
 
@@ -104,7 +105,7 @@ def update_sensor_data():
 # Plot parts from:
 # https://gist.github.com/brandoncurtis/33a67d9d402973face8d
 #
-def main():
+def main(output_file):
 
     if PLOT_ON:
 
@@ -171,7 +172,9 @@ def main():
             print(exception)
             break
 
-        print(sensor_data)
+        # print(sensor_data)
+        # print("writing data")
+        np.savetxt(output_file, sensor_data.reshape(1, sensor_data.size), fmt="%d", delimiter=",")
         sleep(SLEEP_TIME_BETWEEN_REQUESTS)
 
     if PLOT_ON:
@@ -196,6 +199,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+
+    # buffer = open(filename, "w+")
+    main(filename)
+    # buffer.close()
     # serial_input(True)
     # print(get_serial_line())
