@@ -1,4 +1,3 @@
-
 import serial
 import numpy as np
 from time import time, sleep
@@ -19,9 +18,20 @@ MAX_SIZE = 16
 SLEEP_TIME_AFTER_CMD = .01
 SLEEP_TIME_BETWEEN_REQUESTS = .05  # .01
 
-NUMBER_OF_VARIABLES = 2
+NUMBER_OF_VARIABLES = 8
 PLOT_ON = False
 
+DEFAULT = -10
+sensors = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]  # save last inputs
+chosen_i = DEFAULT  # save last peak
+UPPER_LIMIT = 30
+circle_mode = False
+num_rounds = 0
+prev = 'c'
+STATIC = 0
+COVER = 1
+RIGHT_TURN = 2
+LEFT_TURN = 3
 
 ser = serial.Serial('/dev/tty.usbmodem1411', 9600)  # left usb port
 # ser = serial.Serial('/dev/tty.usbmodem1421', 9600)  # right usb port
@@ -31,7 +41,6 @@ sensor_data = np.zeros(NUMBER_OF_VARIABLES)
 
 
 def serial_input(start_transmission):
-
     if start_transmission:
         ser.reset_input_buffer()
         ser.write(CMD_START_TRANSMISSION)
@@ -81,7 +90,6 @@ def get_serial_data():
 
 
 def update_sensor_data():
-
     try:
         new_data = get_serial_data()
 
@@ -106,9 +114,7 @@ def update_sensor_data():
 # https://gist.github.com/brandoncurtis/33a67d9d402973face8d
 #
 def main(output_file):
-
     if PLOT_ON:
-
         # set plot to animated
         plt.ion()
         # plt.interactive(True)
@@ -174,11 +180,11 @@ def main(output_file):
 
         # print(sensor_data)
         # print("writing data")
-        np.savetxt(output_file, sensor_data.reshape(1, sensor_data.size), fmt="%d", delimiter=",")
+        # np.savetxt(output_file, sensor_data.reshape(1, sensor_data.size), fmt="%d", delimiter=",")
+        read_gestures()
         sleep(SLEEP_TIME_BETWEEN_REQUESTS)
 
     if PLOT_ON:
-
         # plt.ioff()
 
         # plot all of the data you collected
@@ -198,8 +204,54 @@ def main(output_file):
     ser.close()
 
 
-if __name__ == "__main__":
+def read_gestures():
+    sensor_list = sensor_data
+    high_count = 0
+    global chosen_i, circle_mode, num_rounds, prev
+    cur_i = -1
+    cur_value = 0
+    for i in range(8):
+        if (sensor_list[i] - sensors[i]) >= UPPER_LIMIT:
+            high_count += 1
+            if cur_value < sensor_list[i]:
+                cur_value = sensor_list[i]
+                cur_i = i
+        sensors[i] = sensor_list[i]
+    if (circle_mode is False) and (high_count >= 6):
+        return COVER
+    elif (circle_mode is False) and (high_count == 0):
+        return STATIC
+    elif 1 <= high_count <= 2:
+        circle_mode = True
+        if chosen_i == DEFAULT:
+            chosen_i = cur_i
+        if cur_i == chosen_i:
+            return
+        else:
+            if (chosen_i == (cur_i + 1) % 8) or (chosen_i == (cur_i + 2) % 8) or (chosen_i == (cur_i + 3) % 8):
+                chosen_i = cur_i
+                if prev != 'r':
+                    prev = 'r'
+                    return
+                else:
+                    return RIGHT_TURN
+            if (chosen_i == (cur_i - 1) % 8) or (chosen_i == (cur_i - 2) % 8) or (chosen_i == (cur_i - 3) % 8):
+                chosen_i = cur_i
+                if prev != 'l':
+                    prev = 'l'
+                    return
+                else:
+                    return LEFT_TURN
+    if circle_mode:
+        num_rounds += 1
+        if num_rounds == 15:
+            num_rounds = 0
+            prev = 'c'
+            chosen_i = DEFAULT
+            circle_mode = False
 
+
+if __name__ == "__main__":
     # buffer = open(filename, "w+")
     main(filename)
     # buffer.close()
