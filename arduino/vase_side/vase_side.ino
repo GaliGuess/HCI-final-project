@@ -8,7 +8,7 @@ bool sending_data = false;
 bool SERIAL_PLOTTER = true;
 
 int cs_samples = 80;
-int delay_time = 50;
+int delay_time = 50; 
 int sensor_calibration_time = 0xFFFFFFFF;
 
 char serial_input;
@@ -34,14 +34,14 @@ int delay_time_readings = 1;
 
 
 void init_sensors() {
-  sensors[0] = new CapacitiveSensor(13, 12);
-  sensors[1] = new CapacitiveSensor(13, 11);
-  sensors[2] = new CapacitiveSensor(13, 9);
-  sensors[3] = new CapacitiveSensor(13, 8);
-  sensors[4] = new CapacitiveSensor(13, 6);
-  sensors[5] = new CapacitiveSensor(13, 5);
-  sensors[6] = new CapacitiveSensor(13, 3);
-  sensors[7] = new CapacitiveSensor(13, 2);
+  sensors[0] = new CapacitiveSensor(13, 3);
+  sensors[1] = new CapacitiveSensor(13, 9);
+  sensors[2] = new CapacitiveSensor(13, 11);
+  sensors[3] = new CapacitiveSensor(13, 2);
+  sensors[4] = new CapacitiveSensor(13, 5);
+  sensors[5] = new CapacitiveSensor(13, 12);
+  sensors[6] = new CapacitiveSensor(13, 6);
+  sensors[7] = new CapacitiveSensor(13, 8);
 
   for (int sensor_idx = 0; sensor_idx < numSensors; sensor_idx++) {
     sensors[sensor_idx]->set_CS_AutocaL_Millis(sensor_calibration_time);
