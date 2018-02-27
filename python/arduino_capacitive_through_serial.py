@@ -1,5 +1,5 @@
 import serial
-import numpy as np
+# import numpy as np
 from time import time, sleep
 from matplotlib import pyplot as plt
 
@@ -20,9 +20,11 @@ SLEEP_TIME_BETWEEN_REQUESTS = .05  # .01
 
 NUMBER_OF_VARIABLES = 8
 PLOT_ON = False
+SLIDER_RANGE = 200
 
 DEFAULT = -10
-sensors = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]  # save last inputs
+sensors = [1000] * NUMBER_OF_VARIABLES  # save last inputs
+max_vals = [0] * NUMBER_OF_VARIABLES
 chosen_i = DEFAULT  # save last peak
 UPPER_LIMIT = 30
 circle_mode = False
@@ -33,11 +35,12 @@ COVER = 1
 RIGHT_TURN = 2
 LEFT_TURN = 3
 
-ser = serial.Serial('/dev/tty.usbmodem1411', 9600)  # left usb port
+ser = serial.Serial('COM4', 9600)
+# ser = serial.Serial('/dev/tty.usbmodem1411', 9600)  # left usb port
 # ser = serial.Serial('/dev/tty.usbmodem1421', 9600)  # right usb port
 sleep(3)
 ser.flushInput()
-sensor_data = np.zeros(NUMBER_OF_VARIABLES)
+sensor_data = [0] * NUMBER_OF_VARIABLES
 
 
 def serial_input(start_transmission):
@@ -60,7 +63,7 @@ def get_serial_line():
 
 
 def get_serial_data():
-    data = np.zeros(MAX_SIZE)
+    data = [0] * MAX_SIZE
 
     serial_input(True)
 
@@ -99,7 +102,7 @@ def update_sensor_data():
     except OverflowError as exception:
         raise exception
 
-    if new_data.size == NUMBER_OF_VARIABLES:
+    if len(new_data) == NUMBER_OF_VARIABLES:
         global sensor_data
         sensor_data = new_data
 
@@ -181,7 +184,17 @@ def main(output_file):
         # print(sensor_data)
         # print("writing data")
         # np.savetxt(output_file, sensor_data.reshape(1, sensor_data.size), fmt="%d", delimiter=",")
-        read_gestures()
+
+        file = open(output_file, "w+")
+        gesture = read_gestures()
+        normalized = [0] * NUMBER_OF_VARIABLES
+        for i in range (NUMBER_OF_VARIABLES):
+            normalized[i] = sensor_data[i]/max_vals[i] * SLIDER_RANGE
+        file.write(str(gesture) + "\n")
+        str_data = ",".join(map(str, normalized))
+        file.write(str_data)
+        file.close()
+
         sleep(SLEEP_TIME_BETWEEN_REQUESTS)
 
     if PLOT_ON:
@@ -203,14 +216,17 @@ def main(output_file):
 
     ser.close()
 
+NO_GESTURE = -1
 
 def read_gestures():
     sensor_list = sensor_data
     high_count = 0
-    global chosen_i, circle_mode, num_rounds, prev
+    global chosen_i, circle_mode, num_rounds, prev, max_vals
     cur_i = -1
     cur_value = 0
     for i in range(8):
+        if(sensor_list[i] > max_vals[i]):
+            max_vals[i] = sensor_list[i]
         if (sensor_list[i] - sensors[i]) >= UPPER_LIMIT:
             high_count += 1
             if cur_value < sensor_list[i]:
@@ -219,27 +235,27 @@ def read_gestures():
         sensors[i] = sensor_list[i]
     if (circle_mode is False) and (high_count >= 6):
         return COVER
-    elif (circle_mode is False) and (high_count == 0):
+    elif (not (circle_mode)) and (high_count == 0):
         return STATIC
     elif 1 <= high_count <= 2:
         circle_mode = True
         if chosen_i == DEFAULT:
             chosen_i = cur_i
         if cur_i == chosen_i:
-            return
+            return NO_GESTURE
         else:
             if (chosen_i == (cur_i + 1) % 8) or (chosen_i == (cur_i + 2) % 8) or (chosen_i == (cur_i + 3) % 8):
                 chosen_i = cur_i
                 if prev != 'r':
                     prev = 'r'
-                    return
+                    return NO_GESTURE
                 else:
                     return RIGHT_TURN
             if (chosen_i == (cur_i - 1) % 8) or (chosen_i == (cur_i - 2) % 8) or (chosen_i == (cur_i - 3) % 8):
                 chosen_i = cur_i
                 if prev != 'l':
                     prev = 'l'
-                    return
+                    return NO_GESTURE
                 else:
                     return LEFT_TURN
     if circle_mode:
