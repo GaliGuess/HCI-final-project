@@ -5,7 +5,7 @@ char CMD_END_TRANSMISSION = 'X';
 char SERIAL_END_TRANSMISSION = 'E';
 bool sending_data = false;
 
-bool SERIAL_PLOTTER = true;
+bool SERIAL_PLOTTER = false;
 
 int cs_samples = 80;
 int delay_time = 50; 
