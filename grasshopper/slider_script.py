@@ -27,7 +27,7 @@ GST_SPIN_RIGHT = 2
 GST_SPIN_LEFT = 3
 
 sensor_number = 8
-filename = "C:\\Users\\student\\Desktop\\HCI-final-project-master\\python\\arduino_buffer.txt"
+filename = "C:\\HCI-final-project-master\\python\\arduino_buffer.txt"
 angle_diff = math.pi / 20
 current_angle = 0
 
@@ -39,7 +39,7 @@ def isclose(a, b, tol=1e-5):
 rs.EnableRedraw(True)
 gh = Rhino.RhinoApp.GetPlugInObject("Grasshopper")
 
-count = [1,2,3,4,5,6,7,8]
+#count = [1,2,3,4,5,6,7,8]
 var_count = 2
 var_down = False
 var_speed = 0.05
@@ -59,27 +59,35 @@ while True:
     # reading file again
     file = open(filename, "r")
     lines = file.readlines()
-    gesture = int(lines[0])
+    
+    if (len(lines) == 2):
+        try:
+            gesture = int(lines[0])
+        except:
+            print(lines[0])           
+    else:
+        gesture = -1
+    
     file.close()
     
     # check gesture
     if (gesture == GST_STATIC):
         data = lines[1].split(",")
         for i in range(sensor_number):
-#            gh.SetSliderValue(GUID_ARR[i], float(data[i]))
+            gh.SetSliderValue(GUID_ARR[i], float(data[i]))
             
             # for testing continuous updates
-            gh.SetSliderValue(GUID_ARR[i], count[i])
-            count[i] += 0.1
-            if count[i] > 10:
-                count[i] = 0
+#            gh.SetSliderValue(GUID_ARR[i], count[i])
+#            count[i] += 0.1
+#            if count[i] > 10:
+#                count[i] = 0
             
     elif (gesture == GST_COVER):
         pass
     
     elif (gesture == GST_SPIN_RIGHT):
         current_angle += angle_diff
-        if (current_angle == 2 * pi):
+        if (current_angle > 2 * math.pi):
             current_angle = 0
         gh.SetSliderValue(ROTATE_GUID, current_angle)
     
