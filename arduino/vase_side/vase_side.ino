@@ -5,6 +5,12 @@ char CMD_END_TRANSMISSION = 'X';
 char SERIAL_END_TRANSMISSION = 'E';
 bool sending_data = false;
 
+char CMD_LED_ON = 'I';
+char CMD_LED_OFF = 'O';
+int led_pin = A0;
+int led_on_val = 255;
+int led_off_val = 0;
+
 bool SERIAL_PLOTTER = false;
 
 int cs_samples = 80;
@@ -53,6 +59,8 @@ void setup() {
   Serial.begin(9600);
 
   init_sensors();
+  pinMode(led_pin, OUTPUT);
+  analogWrite(led_pin, led_on_val);
 
   for (int sensor_idx = 0; sensor_idx < numSensors; sensor_idx++) {
     sensorValues[sensor_idx] = 0;
@@ -112,6 +120,14 @@ void loop() {
     else if (serial_input == CMD_END_TRANSMISSION) 
     {
       sending_data = false;
+    }
+    else if (serial_input == CMD_LED_ON)
+    {
+      analogWrite(led_pin, led_on_val);
+    }
+    else if (serial_input == CMD_LED_OFF)
+    {
+      analogWrite(led_pin, led_off_val);
     }
   }
   
