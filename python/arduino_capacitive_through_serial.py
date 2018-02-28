@@ -1,11 +1,12 @@
 import serial
-# import numpy as np
 from time import time, sleep
-from matplotlib import pyplot as plt
+from copy import deepcopy
 
 # 
 CMD_START_TRANSMISSION = b'G'
 CMD_END_TRANSMISSION = b'X'
+CMD_LED_ON = b'I'
+CMD_LED_OFF = b'O'
 
 # SERIAL_START_TRANSMISSION = 'S'
 SERIAL_END_TRANSMISSION = 'E\r\n'
@@ -19,21 +20,28 @@ SLEEP_TIME_AFTER_CMD = .01
 SLEEP_TIME_BETWEEN_REQUESTS = .05  # .01
 
 NUMBER_OF_VARIABLES = 8
-PLOT_ON = False
-SLIDER_RANGE = 200
+SLIDER_RANGE = 150
 
 DEFAULT = -10
 sensors = [1000] * NUMBER_OF_VARIABLES  # save last inputs
-max_vals = [0] * NUMBER_OF_VARIABLES
+max_vals = [1] * NUMBER_OF_VARIABLES
 chosen_i = DEFAULT  # save last peak
-UPPER_LIMIT = 30
+UPPER_LIMIT = 40
+LOWER_LIMIT = 50
 circle_mode = False
+wait_high = False
+wait_low = False
+cover_count = 0
 num_rounds = 0
 prev = 'c'
+last_call = DEFAULT
 STATIC = 0
 COVER = 1
 RIGHT_TURN = 2
 LEFT_TURN = 3
+COVER_OFF = 4
+GO_BACK = 5
+UNDERSCORE = 10
 
 ser = serial.Serial('COM4', 9600)
 # ser = serial.Serial('/dev/tty.usbmodem1411', 9600)  # left usb port
@@ -53,6 +61,16 @@ def serial_input(start_transmission):
 
     if SLEEP_ON_WRITE:
         sleep(SLEEP_TIME_AFTER_CMD)
+
+
+def led_status(led_on):
+    if led_on:
+        ser.write(CMD_LED_ON)
+    else:
+        ser.write(CMD_LED_OFF)
+
+    # if SLEEP_ON_WRITE:
+    #     sleep(SLEEP_TIME_AFTER_CMD)
 
 
 def get_serial_line():
@@ -117,61 +135,10 @@ def update_sensor_data():
 # https://gist.github.com/brandoncurtis/33a67d9d402973face8d
 #
 def main(output_file):
-    if PLOT_ON:
-        # set plot to animated
-        plt.ion()
-        # plt.interactive(True)
-
-        start_time = time()
-        timepoints = []
-        ydata = []
-        yrange = [-0.1, 5.1]
-        view_time = 2  # seconds of data to view at once
-        duration = 6  # total seconds to collect data
-
-        fig1 = plt.figure()
-        # http://matplotlib.org/users/text_props.html
-        fig1.suptitle('live updated data', fontsize='18', fontweight='bold')
-        plt.xlabel('time, seconds', fontsize='14', fontstyle='italic')
-        plt.ylabel('potential, volts', fontsize='14', fontstyle='italic')
-        plt.axes().grid(True)
-        line1, = plt.plot(ydata, marker='o', markersize=4, linestyle='none', markerfacecolor='red')
-        plt.ylim(yrange)
-        plt.xlim([0, view_time])
-
-        # fig1.show()
-
-    run = True
-
-    # collect the data and plot a moving frame
-    while not PLOT_ON or run:
+    while True:
 
         try:
             new_sensor_data = update_sensor_data()
-
-            if PLOT_ON:
-
-                # store the entire dataset for later
-                ydata.append(new_sensor_data * 5.0 / 1024)
-                timepoints.append(time() - start_time)
-                current_time = timepoints[-1]
-
-                # update the plotted data
-                line1.set_xdata(timepoints)
-                line1.set_ydata(ydata)
-
-                # slide the viewing frame along
-                if current_time > view_time:
-                    plt.xlim([current_time - view_time, current_time])
-
-                # when time's up, kill the collect+plot loop
-                if timepoints[-1] > duration:
-                    run = False
-
-                # update the plot
-                fig1.canvas.draw()
-
-                # plt.show(block=False)
 
         except ValueError as exception:
             print(exception)
@@ -188,76 +155,87 @@ def main(output_file):
         file = open(output_file, "w+")
         gesture = read_gestures()
         normalized = [0] * NUMBER_OF_VARIABLES
-        for i in range (NUMBER_OF_VARIABLES):
-            normalized[i] = sensor_data[i]/max_vals[i] * SLIDER_RANGE
+        for i in range(NUMBER_OF_VARIABLES):
+            normalized[i] = sensor_data[i] / max_vals[i] * SLIDER_RANGE
+            normalized[i] = int(normalized[i])
+            if normalized[i] < UNDERSCORE:
+                normalized[i] = UNDERSCORE
+
         file.write(str(gesture) + "\n")
         str_data = ",".join(map(str, normalized))
         file.write(str_data)
         file.close()
 
+        if gesture == COVER:
+            led_status(False)
+        elif gesture == COVER_OFF:
+            led_status(True)
+
         sleep(SLEEP_TIME_BETWEEN_REQUESTS)
-
-    if PLOT_ON:
-        # plt.ioff()
-
-        # plot all of the data you collected
-        fig2 = plt.figure()
-        # http://matplotlib.org/users/text_props.html
-        fig2.suptitle('complete data trace', fontsize='18', fontweight='bold')
-        plt.xlabel('time, seconds', fontsize='14', fontstyle='italic')
-        plt.ylabel('potential, volts', fontsize='14', fontstyle='italic')
-        plt.axes().grid(True)
-
-        plt.plot(timepoints, ydata, marker='o', markersize=4, linestyle='none', markerfacecolor='red')
-        plt.ylim(yrange)
-        fig2.show()
-
-        plt.show(block=True)
 
     ser.close()
 
-NO_GESTURE = -1
 
 def read_gestures():
+    global chosen_i, circle_mode, wait_high, wait_low, num_rounds, prev, \
+        max_vals, cover_count, last_call
     sensor_list = sensor_data
     high_count = 0
-    global chosen_i, circle_mode, num_rounds, prev, max_vals
-    cur_i = -1
+    low_count = 0
+    cur_i = DEFAULT
     cur_value = 0
-    for i in range(8):
-        if(sensor_list[i] > max_vals[i]):
+
+    for i in range(NUMBER_OF_VARIABLES):
+        if sensor_list[i] > max_vals[i]:  # set max value of each sensor
             max_vals[i] = sensor_list[i]
+        # count how many sensors have a big difference between last call
+        # and this one
         if (sensor_list[i] - sensors[i]) >= UPPER_LIMIT:
             high_count += 1
+            # remember the most dominant sensor
             if cur_value < sensor_list[i]:
                 cur_value = sensor_list[i]
                 cur_i = i
+        if (sensors[i] - sensor_list[i]) >= LOWER_LIMIT:
+            low_count += 1
         sensors[i] = sensor_list[i]
-    if (circle_mode is False) and (high_count >= 6):
-        return COVER
-    elif (not (circle_mode)) and (high_count == 0):
-        return STATIC
-    elif 1 <= high_count <= 2:
+    if wait_low:
+        if low_count >= 4:
+            wait_low = False
+            cover_count += 1
+            if cover_count == 2:
+                cover_count = 0
+                print("COVER_OFF")
+                return COVER_OFF
+            else:
+                wait_high = True
+            return DEFAULT
+    elif wait_high:
+        if high_count >= 6:
+            wait_high = False
+            wait_low = True
+            return DEFAULT
+
+    if high_count == 1:
         circle_mode = True
         if chosen_i == DEFAULT:
             chosen_i = cur_i
-        if cur_i == chosen_i:
-            return NO_GESTURE
-        else:
-            if (chosen_i == (cur_i + 1) % 8) or (chosen_i == (cur_i + 2) % 8) or (chosen_i == (cur_i + 3) % 8):
-                chosen_i = cur_i
-                if prev != 'r':
-                    prev = 'r'
-                    return NO_GESTURE
-                else:
-                    return RIGHT_TURN
-            if (chosen_i == (cur_i - 1) % 8) or (chosen_i == (cur_i - 2) % 8) or (chosen_i == (cur_i - 3) % 8):
-                chosen_i = cur_i
-                if prev != 'l':
-                    prev = 'l'
-                    return NO_GESTURE
-                else:
-                    return LEFT_TURN
+        elif 0 < (cur_i - chosen_i) % (NUMBER_OF_VARIABLES - 1) <= 3:
+            chosen_i = cur_i
+            if prev != 'r':
+                prev = 'r'
+            print("RIGHT_TURN")
+            last_call = RIGHT_TURN
+            return RIGHT_TURN
+        elif 0 < (chosen_i - cur_i) % (NUMBER_OF_VARIABLES - 1) <= 3:
+            chosen_i = cur_i
+            if prev != 'l':
+                prev = 'l'
+            print("LEFT_TURN")
+            last_call = LEFT_TURN
+            return LEFT_TURN
+        return last_call
+
     if circle_mode:
         num_rounds += 1
         if num_rounds == 15:
@@ -265,6 +243,19 @@ def read_gestures():
             prev = 'c'
             chosen_i = DEFAULT
             circle_mode = False
+        return last_call
+
+    if (not circle_mode) and (not wait_high) and (not wait_low):
+        if high_count >= 5:
+            wait_low = True
+            print("COVER")
+            last_call = COVER
+            return COVER
+        elif high_count == 0:
+            print("STATIC")
+            last_call = STATIC
+            return STATIC
+    return DEFAULT
 
 
 if __name__ == "__main__":
