@@ -1,10 +1,13 @@
 #include <CapacitiveSensor.h>
 
+// Data transfer to pySerial options
 char CMD_START_TRANSMISSION = 'G';
 char CMD_END_TRANSMISSION = 'X';
 char SERIAL_END_TRANSMISSION = 'E';
-bool sending_data = false;
+bool sending_data = true;
+char serial_input;
 
+// LED options
 char CMD_LED_ON = 'I';
 char CMD_LED_OFF = 'O';
 int led_pin = A0;
@@ -13,32 +16,28 @@ int led_off_val = 0;
 
 bool SERIAL_PLOTTER = false;
 
-int cs_samples = 80;
-int delay_time = 50; 
-int sensor_calibration_time = 0xFFFFFFFF;
-
-char serial_input;
-
 const int numSensors = 8;
+int cs_samples = 80;
+int sensor_calibration_time = 0xFFFFFFFF;
+int delay_time = 50; 
 
 CapacitiveSensor* sensors[numSensors];
 long sensorValues[numSensors];
 
-// signal smoothing parameters:
+// signal smoothing parameters (sends the sensors' average instead of current value):
 // https://www.arduino.cc/en/Tutorial/Smoothing
 //
 bool SMOOTHING_ON = true;
-
-const int numReadings = 10;
-
-long readings[numSensors][numReadings];      // the readings from the analog input
-int readIndex = 0;              // the index of the current reading
-long total[numSensors];                  // the running total
-long average[numSensors];                // the average
+const int numReadings = 10;                // the number of sensor readings to average
+long readings[numSensors][numReadings];    // the readings from the analog input
+int readIndex = 0;                         // the index of the current reading
+long total[numSensors];                    // the running total
+long average[numSensors];                  // the average
 
 int delay_time_readings = 1;
 
 
+// Initialize all capacitive sensors
 void init_sensors() {
   sensors[0] = new CapacitiveSensor(13, 3);
   sensors[1] = new CapacitiveSensor(13, 9);
@@ -66,10 +65,8 @@ void setup() {
     sensorValues[sensor_idx] = 0;
 
     if (SMOOTHING_ON) {
-      
       total[sensor_idx] = 0;
       average[sensor_idx] = 0;
-      
       for (int thisReading = 0; thisReading < numReadings; thisReading++) {
         readings[sensor_idx][thisReading] = 0;
       }
@@ -77,10 +74,11 @@ void setup() {
   }
 }
 
+
 void loop() {
 
   if (SMOOTHING_ON) {
-
+    
     for (int i = 0; i < numSensors; i++) {
       
       // subtract the last reading:
@@ -110,6 +108,7 @@ void loop() {
     delay(delay_time_readings);
   }
 
+  // Read input commands from serial
   if (Serial.available() > 0)
   {
     serial_input = Serial.read();
@@ -131,32 +130,36 @@ void loop() {
     }
   }
   
-  // to override nee for send command in serial plotter case
+  // If data is sent to the serial plotter instead of pySerial, this overwrites the need for a command to be sent
   if (SERIAL_PLOTTER) {
     sending_data = true;
   }
-  
+
+  // Actual data sending
   if (sending_data)
   { 
-    if (!SMOOTHING_ON) {
+    if (!SMOOTHING_ON) 
+    {
       for (int i = 0; i < numSensors; i++) {
         sensorValues[i] = sensors[i]->capacitiveSensor(cs_samples);
       }
     }
     
     // printing sensor data to serial in python or serial plotter format
-    if (!SERIAL_PLOTTER) {
+    if (!SERIAL_PLOTTER) 
+    {
       printToPython();
     }
-    else {
+    else 
+    {
       printToSerialPlotter();
     }
     
-//    delay(delay_time);
+    delay(delay_time);
   }
 }
 
-
+// prints the sensor data once to pySerial
 void printToPython() {
   for (int i = 0; i < numSensors; i++) {
     Serial.println(sensorValues[i]);
@@ -165,6 +168,7 @@ void printToPython() {
   sending_data = false;
 }
 
+// prints the data in format for arduino serial plotter
 void printToSerialPlotter() {
   for (int i = 0; i < numSensors - 1; i++) {
       Serial.print(sensorValues[i]);
